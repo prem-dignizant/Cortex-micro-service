@@ -6,7 +6,7 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 region_name = os.getenv("region_name")
-print(AWS_ACCESS_KEY_ID)
+
 def get_s3_data(s3_url):
     s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
     file_key = s3_url.split("/")[-1]
@@ -27,7 +27,11 @@ def get_s3_data(s3_url):
 
 def pdf_to_image(pdf_path):
     images = convert_from_path(pdf_path)
-
+    images = convert_from_path(pdf_path, dpi=300)
+    path_list = []
     for i, image in enumerate(images):
         image_resized = image.resize((1024, 1024))  
-        image_resized.save(os.path.join('input_files', f'page_{i + 1}.png'), 'PNG')
+        image_path = os.path.join('input_files', f'page_{i + 1}.png')
+        image_resized.save(image_path, 'PNG')
+        path_list.append(image_path)
+    return path_list
