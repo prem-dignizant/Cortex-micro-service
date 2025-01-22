@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from service import get_s3_data , pdf_to_image
 import os, shutil
 from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
 
