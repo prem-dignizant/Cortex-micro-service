@@ -3,3 +3,5 @@ myenv
 __pycache__
 SAM_model
 check_model.ipynb
+*.json
+*.xfdf

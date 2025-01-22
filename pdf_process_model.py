@@ -8,8 +8,8 @@ print("OpenCV version:", cv2.__version__)
 print(torch.cuda.is_available())
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 MODEL_TYPE = "vit_h"
-CHECKPOINT_PATH= os.getenv("CHECKPOINT_PATH")
-
+CHECKPOINT_PATH= "D:\Melbin\G5_ML_model\SAM_model\Models\sam_vit_h_4b8939.pth"
+print("Model checkpoint path:", CHECKPOINT_PATH)
 def get_segment(image_path):
     sam = sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT_PATH).to(device=DEVICE)
     mask_generator = SamAutomaticMaskGenerator(sam)
