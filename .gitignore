@@ -3,3 +3,4 @@ myenv
 __pycache__
 SAM_model
 input_files
+output_files

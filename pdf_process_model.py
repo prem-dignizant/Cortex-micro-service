@@ -225,7 +225,7 @@ def create_xfdf_from_masks(mask_results, output_file='output.xfdf'):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(complete_xml)
     
-    return complete_xml
+    return f.name
 
 def process_masks_to_xfdf(sam_result, output_file='annotations.xfdf'):
     """
