@@ -49,7 +49,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 @app.get("/download/{file_name}")
 async def download_file(file_name: str):
-    file_path = os.path.join(folder_path, file_name)     # change the path to the output_path
+    file_path = os.path.join(output_path, file_name)     # MANAGE FILE PATH 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path, media_type="application/zip", filename=file_name)
@@ -78,7 +78,7 @@ def ml_process(s3_url):
         for file_path in xfdf_files:
             zipf.write(file_path, arcname=os.path.basename(file_path))  
 
-    # return  zip_file_path
+    return  zip_file_path
     
 @app.post("/process-pdf")
 async def process_pdf(request: dict):
