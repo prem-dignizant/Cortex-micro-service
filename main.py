@@ -1,34 +1,69 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from service import get_s3_data , pdf_to_image
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse , Response
 import os , random
-from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
 from datetime import datetime
 import zipfile
+import uuid
+from service import get_s3_data , pdf_to_image
+from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
+from schema import PDFRequest
 # Initialize FastAPI app
 app = FastAPI()
 
+# Store active WebSocket connections
+active_connections = {}
+
+BASE_URL = "http://localhost:8080"
 folder_path = "input_files"
 output_path = "output_files"
-executor = ThreadPoolExecutor(max_workers=4)  
-# Input schema
-class PDFRequest(BaseModel):
-    s3_url: str
+os.makedirs(folder_path, exist_ok=True)
+os.makedirs(output_path, exist_ok=True)  
+
+executor = ThreadPoolExecutor(max_workers=4)    # A helper function to run the GPU task in a thread
+
+# Helper function to send data via WebSocket
+async def notify_client(websocket: WebSocket, task_id: str, file_url: str):
+    message = {
+        "task_id": task_id,
+        "status": "completed",
+        "file_url": file_url
+    }
+    await websocket.send_json(message)
 
 
-# A helper function to run the GPU task in a thread
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await websocket.accept()
+    print(f"Client {client_id} connected")
+    active_connections[client_id] = websocket
+    try:
+        while True:
+            await websocket.receive_text()  # Keep connection alive
+    except WebSocketDisconnect:
+        print(f"Client {client_id} disconnected")
+        del active_connections[client_id]
+
+
+@app.get("/download/{file_name}")
+async def download_file(file_name: str):
+    file_path = os.path.join(folder_path, file_name)     # change the path to the output_path
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path, media_type="application/zip", filename=file_name)
+
+
 async def run_in_thread_pool(func, *args):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor, func, *args)
 
 def ml_process(s3_url):
+    # time.sleep(15)
     pdf_file = get_s3_data(s3_url,folder_path)
     all_images = pdf_to_image(pdf_file,folder_path)
-    print(f'************ done', datetime.now())
+    # return all_images[0]
     xfdf_files = []
     for image in all_images:
         sam_result = get_segment(image)
@@ -43,31 +78,41 @@ def ml_process(s3_url):
         for file_path in xfdf_files:
             zipf.write(file_path, arcname=os.path.basename(file_path))  
 
-    return  zip_file_path
+    # return  zip_file_path
     
 @app.post("/process-pdf")
-async def process_pdf(request: PDFRequest):
-    os.makedirs(folder_path, exist_ok=True)
-    os.makedirs(output_path, exist_ok=True)    
+async def process_pdf(request: dict):
     try:
-        zip_file_path = ml_process(request.s3_url)
-        
-        return FileResponse(
-            zip_file_path,
-            media_type="application/zip",
-            filename="output_files.zip",
-        )
+        s3_url = request.get("s3_url")
+        zip_file_path = await run_in_thread_pool(ml_process, s3_url)
+        file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
+        return {"file_url": file_url}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
 
 
 @app.post("/multi_process_pdf")
 async def multi_process_pdf(request: PDFRequest,background_tasks: BackgroundTasks):
-    os.makedirs(folder_path, exist_ok=True)
-    os.makedirs(output_path, exist_ok=True)  
-    try:
-        result = background_tasks.add_task(lambda: executor.submit(ml_process,request.s3_url))
-        return {"message": 'success'}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
+    print('************')
+    s3_url = request.s3_url
+    client_id  = request.client_id 
+    if client_id not in active_connections:
+        print('******WebSocket connection not found******')
+        raise HTTPException(status_code=400, detail="WebSocket connection not found")
+    print('************')
+    print(active_connections)
+    task_id = str(uuid.uuid4())
+
+    def task_wrapper():
+        try:
+            zip_file_path = ml_process(s3_url)
+            file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
+            asyncio.run(notify_client(active_connections[client_id], task_id, file_url))
+        except Exception as e:
+            error_message = {"task_id": task_id, "status": "failed", "error": str(e)}
+            asyncio.run(active_connections[client_id].send_json(error_message))
+
+
+    background_tasks.add_task(lambda: executor.submit(task_wrapper))
+    return {"task_id": task_id, "message": "Task submitted"}
 
