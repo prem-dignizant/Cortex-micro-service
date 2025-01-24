@@ -70,7 +70,8 @@ def ml_process(s3_url):
         # annotations = process_segmentation_masks(sam_result)
         xfdf_file= process_masks_to_xfdf(sam_result, output_path)
         xfdf_files.append(xfdf_file)
-        
+        os.remove(image)
+
     zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
     with zipfile.ZipFile(zip_file_path, "w") as zipf:
         for file_path in xfdf_files:

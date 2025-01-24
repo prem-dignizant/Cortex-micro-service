@@ -3,7 +3,7 @@ import torch
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 import os
 import supervision as sv
-from .service import random_file_name
+from service import random_file_name
 print("OpenCV version:", cv2.__version__)
 print(torch.cuda.is_available())
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
