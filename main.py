@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 import zipfile
 import uuid
-from service import get_s3_data , pdf_to_image
+from service import get_s3_data , pdf_to_image , random_file_name
 from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
 from schema import PDFRequest
 # Initialize FastAPI app
@@ -68,16 +68,14 @@ def ml_process(s3_url):
     for image in all_images:
         sam_result = get_segment(image)
         # annotations = process_segmentation_masks(sam_result)
-        xfdf_file= process_masks_to_xfdf(sam_result, 'output.xfdf')
+        xfdf_file= process_masks_to_xfdf(sam_result, output_path)
         xfdf_files.append(xfdf_file)
-    while True:
-        zip_file_path = os.path.join(output_path, f"xfdf_content_{random.randint(0, 10000)}.zip")
-        if not os.path.exists(zip_file_path):
-            break
+        
+    zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
     with zipfile.ZipFile(zip_file_path, "w") as zipf:
         for file_path in xfdf_files:
             zipf.write(file_path, arcname=os.path.basename(file_path))  
-
+            os.remove(file_path)
     return  zip_file_path
     
 @app.post("/process-pdf")

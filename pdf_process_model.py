@@ -3,7 +3,7 @@ import torch
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 import os
 import supervision as sv
-
+from .service import random_file_name
 print("OpenCV version:", cv2.__version__)
 print(torch.cuda.is_available())
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -34,7 +34,7 @@ def get_segment(image_path):
 
 import numpy as np
 from shapely.geometry import Polygon
-import json
+import json , random
 
 def mask_to_polygons(mask_results):
     """
@@ -137,7 +137,7 @@ import pytz
 import uuid
 import xml.etree.ElementTree as ET
 
-def create_xfdf_from_masks(mask_results, output_file='output.xfdf'):
+def create_xfdf_from_masks(mask_results, output_path):
     """
     Convert segmentation masks to XFDF format for PDF annotations.
     
@@ -231,9 +231,10 @@ def create_xfdf_from_masks(mask_results, output_file='output.xfdf'):
     complete_xml = xml_str + tree_str
     
     # Save to file
-    with open(output_file, 'w', encoding='utf-8') as f:
+    xfdf_path = random_file_name(output_path , "xfdf_file" , "pdf")
+    with open(xfdf_path, 'w', encoding='utf-8') as f:
         f.write(complete_xml)
-    
+
     return f.name
 
 def process_masks_to_xfdf(sam_result, output_file='annotations.xfdf'):

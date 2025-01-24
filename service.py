@@ -8,15 +8,21 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 region_name = os.getenv("region_name")
 
+
+def random_file_name(input_folder , prefix , extension):
+    while True:
+        file_name = f"{prefix}_{random.randint(0, 10000)}.{extension}"
+        file_path = os.path.join(input_folder, file_name)
+        if not os.path.exists(file_path):  
+            return file_path
+
 def get_s3_data(s3_url,input_folder):
     s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
     file_key = s3_url.split("/")[-1]
     try:
         response = s3_client.get_object(Bucket=AWS_STORAGE_BUCKET_NAME, Key=file_key)
-        while True:
-            file_name = os.path.join(input_folder, f"data_{random.randint(0, 10000)}.pdf")
-            if not os.path.exists(file_name):  
-                break 
+        file_name = random_file_name(input_folder , "data" , "pdf")
+
         with open(file_name, 'wb') as file:
             file.write(response['Body'].read())
 
@@ -73,10 +79,8 @@ def pdf_to_image(pdf_path,output_folder):
         # Save the high-resolution image (original image)
         # high_res_image_path = os.path.join(output_folder, 'high_res_image.png')
         # image.save(high_res_image_path, 'PNG')
-        while True:
-            reshaped_image_path = os.path.join(output_folder, f"image_{random.randint(0, 10000)}.png")
-            if not os.path.exists(reshaped_image_path):  
-                break
+
+        reshaped_image_path = random_file_name(output_folder , "image" , "png")
 
         new_image.save(reshaped_image_path, 'PNG')
         image_list.append(reshaped_image_path)
