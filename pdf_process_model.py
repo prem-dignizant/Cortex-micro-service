@@ -11,15 +11,24 @@ MODEL_TYPE = "vit_h"
 CHECKPOINT_PATH= os.getenv("CHECKPOINT_PATH")
 
 def get_segment(image_path):
-    sam = sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT_PATH).to(device=DEVICE)
-    mask_generator = SamAutomaticMaskGenerator(sam)
+    # Initialize the model
+    sam = sam_model_registry[MODEL_TYPE](checkpoint=None).to(device=DEVICE)
+    # Load and preprocess the state dict
+    state_dict = torch.load(CHECKPOINT_PATH)
+    new_state_dict = {}
+    for key in state_dict.keys():
+        new_key = key.replace('sam.', '')
+        new_state_dict[new_key] = state_dict[key]
 
-    image_bgr = cv2.imread(image_path)
+    # Load the processed state dict
+    sam.load_state_dict(new_state_dict)
+    mask_generator = SamAutomaticMaskGenerator(sam)
+    IMAGE_PATH = image_path
+    image_bgr = cv2.imread(IMAGE_PATH)
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
     sam_result = mask_generator.generate(image_rgb)
-
-    return sam_result
+    return sam_result   
 
 ########################################################################
 
@@ -117,7 +126,7 @@ def process_segmentation_masks(sam_result, output_file='annotations.json'):
         output_file (str): Path to save the annotations
     """
     annotations = mask_to_polygons(sam_result)
-    save_annotations(annotations, output_file)
+    # save_annotations(annotations, output_file)
     return annotations
 
 

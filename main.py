@@ -67,7 +67,7 @@ def ml_process(s3_url):
     xfdf_files = []
     for image in all_images:
         sam_result = get_segment(image)
-        annotations = process_segmentation_masks(sam_result)
+        # annotations = process_segmentation_masks(sam_result)
         xfdf_file= process_masks_to_xfdf(sam_result, 'output.xfdf')
         xfdf_files.append(xfdf_file)
     while True:
