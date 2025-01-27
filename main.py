@@ -7,11 +7,11 @@ import time
 from datetime import datetime
 import zipfile
 import uuid
-from service import get_s3_data , pdf_to_image , random_file_name
+from service import get_s3_data , pdf_to_image , random_file_name , delete_old_files
 from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
 from schema import PDFRequest
-# Initialize FastAPI app
-app = FastAPI()
+from apscheduler.schedulers.background import BackgroundScheduler
+from contextlib import asynccontextmanager
 
 # Store active WebSocket connections
 active_connections = {}
@@ -23,6 +23,31 @@ os.makedirs(folder_path, exist_ok=True)
 os.makedirs(output_path, exist_ok=True)  
 
 executor = ThreadPoolExecutor(max_workers=4)    # A helper function to run the GPU task in a thread
+scheduler = BackgroundScheduler()
+
+def start_scheduler():
+    """
+    Starts the APScheduler and schedules the `delete_old_files` job.
+    """
+    scheduler.add_job(delete_old_files, "interval", days=1, kwargs={"output_path": output_path})
+    scheduler.start()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Server starting: Running initial cleanup and scheduler")
+    delete_old_files(output_path)  # Run the cleanup task at startup
+    start_scheduler()  # Start the scheduler for periodic cleanup
+
+    yield  # Wait here until the application shuts down
+
+    print("Server shutting down: Stopping scheduler")
+    scheduler.shutdown()
+
+
+# Initialize the FastAPI app with lifecycle management
+app = FastAPI(lifespan=lifespan)
+
 
 # Helper function to send data via WebSocket
 async def notify_client(websocket: WebSocket, task_id: str, file_url: str):

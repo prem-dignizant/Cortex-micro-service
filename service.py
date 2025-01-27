@@ -2,12 +2,13 @@ import boto3
 import requests , os , random
 from pdf2image import convert_from_path
 from PIL import Image
+from datetime import datetime, timedelta
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 region_name = os.getenv("region_name")
-
+ZIP_FILE_KEEP = int(os.getenv("ZIP_FILE_KEEP", 1))
 
 def random_file_name(input_folder , prefix , extension):
     while True:
@@ -86,6 +87,22 @@ def pdf_to_image(pdf_path,output_folder):
         image_list.append(reshaped_image_path)
     os.remove(pdf_path)
     return  image_list
+
+
+def delete_old_files(output_path):
+    """
+    Deletes files in the specified directory that are older than ZIP_FILE_KEEP day.
+    """
+    now = datetime.now()
+    one_day_ago = now - timedelta(days=ZIP_FILE_KEEP)
+    print(f"Deleting files older than: {one_day_ago}")
+    for filename in os.listdir(output_path):
+        file_path = os.path.join(output_path, filename)
+        if os.path.isfile(file_path):  # Check if it's a file
+            file_creation_time = datetime.fromtimestamp(os.path.getctime(file_path))
+            if file_creation_time < one_day_ago:
+                os.remove(file_path)
+                print(f"Deleted: {file_path}")
 
 
 
