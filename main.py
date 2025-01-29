@@ -85,24 +85,28 @@ async def run_in_thread_pool(func, *args):
     return await loop.run_in_executor(executor, func, *args)
 
 def ml_process(s3_url):
-    # time.sleep(15)
-    pdf_file = get_s3_data(s3_url,folder_path)
-    all_images = pdf_to_image(pdf_file,folder_path)
-    # return all_images[0]
-    xfdf_files = []
-    for image in all_images:
-        sam_result = get_segment(image)
-        # annotations = process_segmentation_masks(sam_result)
-        xfdf_file= process_masks_to_xfdf(sam_result, output_path)
-        xfdf_files.append(xfdf_file)
-        os.remove(image)
+    try:
+        pdf_file = get_s3_data(s3_url,folder_path)
+        if not pdf_file:
+            raise HTTPException(status_code=400, detail="Failed to download PDF")
+        all_images = pdf_to_image(pdf_file,folder_path)
+        # return all_images[0]
+        xfdf_files = []
+        for image in all_images:
+            sam_result = get_segment(image)
+            # annotations = process_segmentation_masks(sam_result)
+            xfdf_file= process_masks_to_xfdf(sam_result, output_path)
+            xfdf_files.append(xfdf_file)
+            os.remove(image)
 
-    zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
-    with zipfile.ZipFile(zip_file_path, "w") as zipf:
-        for file_path in xfdf_files:
-            zipf.write(file_path, arcname=os.path.basename(file_path))  
-            os.remove(file_path)
-    return  zip_file_path
+        zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
+        with zipfile.ZipFile(zip_file_path, "w") as zipf:
+            for file_path in xfdf_files:
+                zipf.write(file_path, arcname=os.path.basename(file_path))  
+                os.remove(file_path)
+        return  zip_file_path
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to ml_process: {e}")
     
 @app.post("/process-pdf")
 async def process_pdf(request: dict):

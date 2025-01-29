@@ -19,7 +19,7 @@ def random_file_name(input_folder , prefix , extension):
 
 def get_s3_data(s3_url,input_folder):
     s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
-    file_key = s3_url.split("/")[-1]
+    file_key = s3_url.split(f"{AWS_STORAGE_BUCKET_NAME}/")[-1]
     try:
         response = s3_client.get_object(Bucket=AWS_STORAGE_BUCKET_NAME, Key=file_key)
         file_name = random_file_name(input_folder , "data" , "pdf")
@@ -32,7 +32,7 @@ def get_s3_data(s3_url,input_folder):
         print(f"Error downloading from S3: {e}")
         return None
 
-# get_s3_data("s3://prem272buck/Mahesh Maniya_CV.pdf")
+# get_s3_data("s3://prem272buck/pdf_folder/data_3675.pdf" , "input_files")
 
 
 Image.MAX_IMAGE_PIXELS = None  
