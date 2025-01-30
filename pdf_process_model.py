@@ -231,7 +231,7 @@ def create_xfdf_from_masks(mask_results, output_path,file_name_prefix):
     complete_xml = xml_str + tree_str
     
     # Save to file
-    xfdf_path = random_file_name(output_path , file_name_prefix , "pdf")
+    xfdf_path = random_file_name(output_path , file_name_prefix , ".xfdf")
     with open(xfdf_path, 'w', encoding='utf-8') as f:
         f.write(complete_xml)
 
