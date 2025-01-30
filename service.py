@@ -19,7 +19,7 @@ def random_file_name(input_folder , prefix , extension):
 
 def get_s3_data(s3_url,input_folder):
     s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
-    file_key = s3_url.split(f"{AWS_STORAGE_BUCKET_NAME}/")[-1]
+    file_key = s3_url.split("/")[-1]
     try:
         response = s3_client.get_object(Bucket=AWS_STORAGE_BUCKET_NAME, Key=file_key)
         file_name = random_file_name(input_folder , "data" , "pdf")
@@ -32,7 +32,35 @@ def get_s3_data(s3_url,input_folder):
         print(f"Error downloading from S3: {e}")
         return None
 
-# get_s3_data("s3://prem272buck/pdf_folder/data_3675.pdf" , "input_files")
+# get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
+# print(AWS_ACCESS_KEY_ID)
+# # Initialize the S3 client
+# s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
+
+# # Define the bucket name
+# bucket_name = 'dev-cdn-geometra'
+
+# # 1. Check and print the existing bucket policy
+# try:
+#     policy = s3_client.get_bucket_policy(Bucket=bucket_name)
+#     print("Existing Bucket Policy:")
+#     print(policy['Policy'])
+# except Exception as e:
+#     print(f"Error retrieving bucket policy: {e}")
+
+# # 2. List all folders and files (objects) in the bucket
+# print("\nListing folders and files in the bucket:")
+# try:
+#     response = s3_client.list_objects_v2(Bucket=bucket_name)
+
+#     if 'Contents' in response:
+#         for obj in response['Contents']:
+#             print(f"Object Key: {obj['Key']}")
+#     else:
+#         print("The bucket is empty.")
+# except Exception as e:
+#     print(f"Error listing objects in the bucket: {e}")
+
 
 
 Image.MAX_IMAGE_PIXELS = None  
