@@ -9,7 +9,7 @@ import zipfile
 import uuid
 from service import get_s3_data , pdf_to_image , random_file_name , delete_old_files
 from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
-from schema import PDFRequest
+from schema import PDFRequest , MultiPDFRequest
 from apscheduler.schedulers.background import BackgroundScheduler
 from contextlib import asynccontextmanager
 
@@ -110,9 +110,9 @@ def ml_process(s3_url):
         raise HTTPException(status_code=400, detail=f"Failed to ml_process: {e}")
     
 @app.post("/process-pdf")
-async def process_pdf(request: dict):
+async def process_pdf(request: PDFRequest):
     try:
-        s3_url = request.get("s3_url")
+        s3_url = request.s3_url
         zip_file_path = await run_in_thread_pool(ml_process, s3_url)
         file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
         return {"file_url": file_url}
@@ -121,7 +121,7 @@ async def process_pdf(request: dict):
 
 
 @app.post("/multi_process_pdf")
-async def multi_process_pdf(request: PDFRequest,background_tasks: BackgroundTasks):
+async def multi_process_pdf(request: MultiPDFRequest,background_tasks: BackgroundTasks):
     print('************')
     s3_url = request.s3_url
     client_id  = request.client_id 
