@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse , Response
+from fastapi.middleware.cors import CORSMiddleware
 import os , random
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -45,8 +46,19 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
+
 # Initialize the FastAPI app with lifecycle management
 app = FastAPI(lifespan=lifespan)
+
+origins = ['*']
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Allow only specified origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 
 # Helper function to send data via WebSocket
