@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
-region_name = os.getenv("region_name")
+REGION_NAME = os.getenv("REGION_NAME")
 ZIP_FILE_KEEP = int(os.getenv("ZIP_FILE_KEEP", 1))
 
 def random_file_name(input_folder , prefix , extension):
@@ -18,7 +18,7 @@ def random_file_name(input_folder , prefix , extension):
             return file_path
 
 def get_s3_data(s3_url,input_folder):
-    s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
+    s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=REGION_NAME)
     file_key = s3_url.split("/")[-1]
     try:
         response = s3_client.get_object(Bucket=AWS_STORAGE_BUCKET_NAME, Key=file_key)
@@ -35,7 +35,7 @@ def get_s3_data(s3_url,input_folder):
 # get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
 # print(AWS_ACCESS_KEY_ID)
 # # Initialize the S3 client
-# s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=region_name)
+# s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=REGION_NAME)
 
 # # Define the bucket name
 # bucket_name = 'dev-cdn-geometra'

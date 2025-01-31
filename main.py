@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 # Store active WebSocket connections
 active_connections = {}
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = os.getenv("BASE_URL")
 folder_path = "input_files"
 output_path = "output_files"
 os.makedirs(folder_path, exist_ok=True)
