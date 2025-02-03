@@ -157,3 +157,6 @@ async def multi_process_pdf(request: MultiPDFRequest,background_tasks: Backgroun
     background_tasks.add_task(lambda: executor.submit(task_wrapper))
     return {"task_id": task_id, "message": "Task submitted"}
 
+@app.post("/test")
+async def root():
+    return {"message": "Hello World"}
