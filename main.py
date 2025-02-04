@@ -112,17 +112,10 @@ def ml_process(s3_url):
             xfdf_content= process_masks_to_xfdf(sam_result)
             data = {}
             data[f'page_{all_images.index(image)}'] = xfdf_content
-            # xfdf_files.append(xfdf_file)
             xfdf_list.append(data)
 
             os.remove(image)
         return xfdf_list
-        # zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
-        # with zipfile.ZipFile(zip_file_path, "w") as zipf:
-        #     for file_path in xfdf_files:
-        #         zipf.write(file_path, arcname=os.path.basename(file_path))  
-        #         os.remove(file_path)
-        # return  zip_file_path
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to ml_process: {e}")
     
