@@ -18,37 +18,38 @@ from contextlib import asynccontextmanager
 active_connections = {}
 
 BASE_URL = os.getenv("BASE_URL")
+print(BASE_URL)
 folder_path = "input_files"
 output_path = "output_files"
 os.makedirs(folder_path, exist_ok=True)
-os.makedirs(output_path, exist_ok=True)  
+# os.makedirs(output_path, exist_ok=True)  
 
 executor = ThreadPoolExecutor(max_workers=4)    # A helper function to run the GPU task in a thread
 scheduler = BackgroundScheduler()
 
-def start_scheduler():
-    """
-    Starts the APScheduler and schedules the `delete_old_files` job.
-    """
-    scheduler.add_job(delete_old_files, "interval", days=1, kwargs={"output_path": output_path})
-    scheduler.start()
+# def start_scheduler():
+#     """
+#     Starts the APScheduler and schedules the `delete_old_files` job.
+#     """
+#     scheduler.add_job(delete_old_files, "interval", days=1, kwargs={"output_path": output_path})
+#     scheduler.start()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("Server starting: Running initial cleanup and scheduler")
-    delete_old_files(output_path)  # Run the cleanup task at startup
-    start_scheduler()  # Start the scheduler for periodic cleanup
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     print("Server starting: Running initial cleanup and scheduler")
+#     delete_old_files(output_path)  # Run the cleanup task at startup
+#     start_scheduler()  # Start the scheduler for periodic cleanup
 
-    yield  # Wait here until the application shuts down
+#     yield  # Wait here until the application shuts down
 
-    print("Server shutting down: Stopping scheduler")
-    scheduler.shutdown()
+#     print("Server shutting down: Stopping scheduler")
+#     scheduler.shutdown()
 
 
 
 # Initialize the FastAPI app with lifecycle management
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 origins = ['*']
 
@@ -62,11 +63,11 @@ app.add_middleware(
 
 
 # Helper function to send data via WebSocket
-async def notify_client(websocket: WebSocket, task_id: str, file_url: str):
+async def notify_client(websocket: WebSocket, task_id: str, xfdf_content: list):
     message = {
         "task_id": task_id,
         "status": "completed",
-        "file_url": file_url
+        "xfdf_content": xfdf_content
     }
     await websocket.send_json(message)
 
@@ -84,12 +85,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         del active_connections[client_id]
 
 
-@app.get("/download/{file_name}")
-async def download_file(file_name: str):
-    file_path = os.path.join(output_path, file_name)     # MANAGE FILE PATH 
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type="application/zip", filename=file_name)
+# @app.get("/download/{file_name}")
+# async def download_file(file_name: str):
+#     file_path = os.path.join(output_path, file_name)     # MANAGE FILE PATH 
+#     if not os.path.exists(file_path):
+#         raise HTTPException(status_code=404, detail="File not found")
+#     return FileResponse(file_path, media_type="application/zip", filename=file_name)
 
 
 async def run_in_thread_pool(func, *args):
@@ -103,21 +104,25 @@ def ml_process(s3_url):
             raise HTTPException(status_code=400, detail="Failed to download PDF")
         all_images = pdf_to_image(pdf_file,folder_path)
         # return all_images[0]
-        xfdf_files = []
+        xfdf_list = []
         for image in all_images:
             sam_result = get_segment(image)
             # annotations = process_segmentation_masks(sam_result)
             file_name_prefix = f"page_{all_images.index(image)}_xfdf"
-            xfdf_file= process_masks_to_xfdf(sam_result, output_path,file_name_prefix)
-            xfdf_files.append(xfdf_file)
-            os.remove(image)
+            xfdf_content= process_masks_to_xfdf(sam_result)
+            data = {}
+            data[f'page_{all_images.index(image)}'] = xfdf_content
+            # xfdf_files.append(xfdf_file)
+            xfdf_list.append(data)
 
-        zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
-        with zipfile.ZipFile(zip_file_path, "w") as zipf:
-            for file_path in xfdf_files:
-                zipf.write(file_path, arcname=os.path.basename(file_path))  
-                os.remove(file_path)
-        return  zip_file_path
+            os.remove(image)
+        return xfdf_list
+        # zip_file_path =  random_file_name(output_path , "xfdf_folder" , "zip")
+        # with zipfile.ZipFile(zip_file_path, "w") as zipf:
+        #     for file_path in xfdf_files:
+        #         zipf.write(file_path, arcname=os.path.basename(file_path))  
+        #         os.remove(file_path)
+        # return  zip_file_path
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to ml_process: {e}")
     
@@ -125,9 +130,9 @@ def ml_process(s3_url):
 async def process_pdf(request: PDFRequest):
     try:
         s3_url = request.s3_url
-        zip_file_path = await run_in_thread_pool(ml_process, s3_url)
-        file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
-        return {"file_url": file_url}
+        xfdf_content = await run_in_thread_pool(ml_process, s3_url)
+        # file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
+        return {"xfdf_content": xfdf_content}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
 
@@ -146,9 +151,9 @@ async def multi_process_pdf(request: MultiPDFRequest,background_tasks: Backgroun
 
     def task_wrapper():
         try:
-            zip_file_path = ml_process(s3_url)
-            file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
-            asyncio.run(notify_client(active_connections[client_id], task_id, file_url))
+            xfdf_content = ml_process(s3_url)
+            # file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
+            asyncio.run(notify_client(active_connections[client_id], task_id, xfdf_content))
         except Exception as e:
             error_message = {"task_id": task_id, "status": "failed", "error": str(e)}
             asyncio.run(active_connections[client_id].send_json(error_message))

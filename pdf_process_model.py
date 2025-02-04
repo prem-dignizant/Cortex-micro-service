@@ -137,7 +137,7 @@ import pytz
 import uuid
 import xml.etree.ElementTree as ET
 
-def create_xfdf_from_masks(mask_results, output_path,file_name_prefix):
+def create_xfdf_from_masks(mask_results):
     """
     Convert segmentation masks to XFDF format for PDF annotations.
     
@@ -231,13 +231,13 @@ def create_xfdf_from_masks(mask_results, output_path,file_name_prefix):
     complete_xml = xml_str + tree_str
     
     # Save to file
-    xfdf_path = random_file_name(output_path , file_name_prefix , "xfdf")
-    with open(xfdf_path, 'w', encoding='utf-8') as f:
-        f.write(complete_xml)
+    # xfdf_path = random_file_name(output_path , file_name_prefix , "xfdf")
+    # with open(xfdf_path, 'w', encoding='utf-8') as f:
+    #     f.write(complete_xml)
 
-    return f.name
+    return complete_xml
 
-def process_masks_to_xfdf(sam_result, output_path,file_name_prefix):
+def process_masks_to_xfdf(sam_result):
     """
     Process SAM results and save as XFDF annotations.
     
@@ -245,6 +245,6 @@ def process_masks_to_xfdf(sam_result, output_path,file_name_prefix):
         sam_result (list): List of SAM segmentation results
         output_file (str): Path to save the XFDF file
     """
-    xfdf_content = create_xfdf_from_masks(sam_result, output_path,file_name_prefix)
+    xfdf_content = create_xfdf_from_masks(sam_result)
     return xfdf_content
 

@@ -32,7 +32,7 @@ def get_s3_data(s3_url,input_folder):
         print(f"Error downloading from S3: {e}")
         return None
 
-# get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
+get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
 # print(AWS_ACCESS_KEY_ID)
 # # Initialize the S3 client
 # s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=REGION_NAME)
