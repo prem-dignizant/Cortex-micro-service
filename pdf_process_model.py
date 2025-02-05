@@ -3,7 +3,11 @@ import torch
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 import os
 import supervision as sv
-from service import random_file_name
+from datetime import datetime
+import pytz
+import uuid
+import xml.etree.ElementTree as ET
+
 print("OpenCV version:", cv2.__version__)
 print(torch.cuda.is_available())
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -93,7 +97,17 @@ def mask_to_polygons(mask_results):
             
             annotations.append(annotation)
     
-    return annotations
+    coco_format = {
+        'info': {
+            'description': 'Converted from segmentation masks',
+            'version': '1.0',
+        },
+        'images': [{'id': 0, 'file_name': 'image.jpg'}],  
+        'categories': [{'id': 1, 'name': 'object'}],  
+        'annotations': annotations
+    }
+
+    return coco_format
 
 def save_annotations(annotations, output_file):
     """
@@ -125,17 +139,11 @@ def process_segmentation_masks(sam_result, output_file='annotations.json'):
         sam_result (list): List of SAM segmentation results
         output_file (str): Path to save the annotations
     """
-    annotations = mask_to_polygons(sam_result)
+    coco_format = mask_to_polygons(sam_result)
     # save_annotations(annotations, output_file)
-    return annotations
-
+    return coco_format
 
 ########################################################################
-
-from datetime import datetime
-import pytz
-import uuid
-import xml.etree.ElementTree as ET
 
 def create_xfdf_from_masks(mask_results):
     """
@@ -248,3 +256,62 @@ def process_masks_to_xfdf(sam_result):
     xfdf_content = create_xfdf_from_masks(sam_result)
     return xfdf_content
 
+########################################################################
+
+def create_xfdf_string(vertices, color="#239123", page="0"):
+    """Create XFDF string for a polygon annotation."""
+    # Generate unique identifier
+    annotation_id = str(uuid.uuid4())
+    current_date = datetime.now().strftime("D:%Y%m%d%H%M%S+02'00'")
+    # Convert vertices to string format
+    vertices_str = ";".join([f"{x},{842-y}" for x, y in vertices])  # Flip y-coordinate (842 - y)
+    # Calculate rect from vertices
+    x_coords = [x for x, y in vertices]
+    y_coords = [y for x, y in vertices]
+    rect = f"{min(x_coords)},{min(y_coords)},{max(x_coords)},{max(y_coords)}"
+    xfdf = f'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
+    <pdf-info xmlns="http://www.pdftron.com/pdfinfo" version="2"/>
+    <fields/>
+    <annots>
+        <polygon color="{color}"
+                 creationdate="{current_date}"
+                 date="{current_date}"
+                 flags="print"
+                 interior-color="{color}"
+                 name="{annotation_id}"
+                 opacity="1"
+                 page="{page}"
+                 rect="{rect}"
+                 subject="Polygon"
+                 title="1"
+                 width="0.5">
+            <vertices>{vertices_str}</vertices>
+        </polygon>
+    </annots>
+    <pages><defmtx matrix="1,0,0,-1,0,842"/></pages>
+</xfdf>'''
+    return xfdf.replace('\n', '').replace('    ', '')
+
+def convert_json_to_xfdf(json_data):
+    """Convert JSON annotations to XFDF format and save directly to file."""
+    final_xfdf = []
+    # with open(output_file, 'w', encoding='utf-8') as f:
+    for annotation in json_data['annotations']:
+        # Create XFDF for segmentation
+        segmentation_vertices = annotation['segmentation'][0]
+        segmentation_xfdf = create_xfdf_string(segmentation_vertices)
+        # Write XFDF string directly to file
+        final_xfdf.append(segmentation_xfdf)
+    return final_xfdf
+
+def process_json_file(input_file, output_file):
+    """Process JSON file and convert to XFDF."""
+    with open(input_file, 'r') as f:
+        json_data = json.load(f)
+    convert_json_to_xfdf(json_data, output_file)
+# Example usage
+
+# input_file = "annotations.json"
+# output_file = "annotations_xfdf.csv"
+# process_json_file(input_file, output_file)

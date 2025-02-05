@@ -1,15 +1,11 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
-from fastapi.responses import FileResponse , Response
 from fastapi.middleware.cors import CORSMiddleware
-import os , random
+import os 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import time
-from datetime import datetime
-import zipfile
 import uuid
-from service import get_s3_data , pdf_to_image , random_file_name , delete_old_files
-from pdf_process_model import get_segment , process_segmentation_masks , process_masks_to_xfdf
+from service import get_s3_data , pdf_to_image
+from pdf_process_model import convert_json_to_xfdf, get_segment , process_segmentation_masks
 from schema import PDFRequest , MultiPDFRequest
 from apscheduler.schedulers.background import BackgroundScheduler
 from contextlib import asynccontextmanager
@@ -26,27 +22,6 @@ os.makedirs(folder_path, exist_ok=True)
 
 executor = ThreadPoolExecutor(max_workers=4)    # A helper function to run the GPU task in a thread
 scheduler = BackgroundScheduler()
-
-# def start_scheduler():
-#     """
-#     Starts the APScheduler and schedules the `delete_old_files` job.
-#     """
-#     scheduler.add_job(delete_old_files, "interval", days=1, kwargs={"output_path": output_path})
-#     scheduler.start()
-
-
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     print("Server starting: Running initial cleanup and scheduler")
-#     delete_old_files(output_path)  # Run the cleanup task at startup
-#     start_scheduler()  # Start the scheduler for periodic cleanup
-
-#     yield  # Wait here until the application shuts down
-
-#     print("Server shutting down: Stopping scheduler")
-#     scheduler.shutdown()
-
-
 
 # Initialize the FastAPI app with lifecycle management
 app = FastAPI()
@@ -85,14 +60,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         del active_connections[client_id]
 
 
-# @app.get("/download/{file_name}")
-# async def download_file(file_name: str):
-#     file_path = os.path.join(output_path, file_name)     # MANAGE FILE PATH 
-#     if not os.path.exists(file_path):
-#         raise HTTPException(status_code=404, detail="File not found")
-#     return FileResponse(file_path, media_type="application/zip", filename=file_name)
-
-
 async def run_in_thread_pool(func, *args):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor, func, *args)
@@ -107,9 +74,9 @@ def ml_process(s3_url):
         xfdf_list = []
         for image in all_images:
             sam_result = get_segment(image)
-            # annotations = process_segmentation_masks(sam_result)
-            file_name_prefix = f"page_{all_images.index(image)}_xfdf"
-            xfdf_content= process_masks_to_xfdf(sam_result)
+            coco_format = process_segmentation_masks(sam_result)
+            xfdf_content = convert_json_to_xfdf(coco_format)
+
             data = {}
             data[f'page_{all_images.index(image)}'] = xfdf_content
             xfdf_list.append(data)
@@ -145,7 +112,6 @@ async def multi_process_pdf(request: MultiPDFRequest,background_tasks: Backgroun
     def task_wrapper():
         try:
             xfdf_content = ml_process(s3_url)
-            # file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
             asyncio.run(notify_client(active_connections[client_id], task_id, xfdf_content))
         except Exception as e:
             error_message = {"task_id": task_id, "status": "failed", "error": str(e)}

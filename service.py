@@ -37,32 +37,6 @@ get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_
 # # Initialize the S3 client
 # s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=REGION_NAME)
 
-# # Define the bucket name
-# bucket_name = 'dev-cdn-geometra'
-
-# # 1. Check and print the existing bucket policy
-# try:
-#     policy = s3_client.get_bucket_policy(Bucket=bucket_name)
-#     print("Existing Bucket Policy:")
-#     print(policy['Policy'])
-# except Exception as e:
-#     print(f"Error retrieving bucket policy: {e}")
-
-# # 2. List all folders and files (objects) in the bucket
-# print("\nListing folders and files in the bucket:")
-# try:
-#     response = s3_client.list_objects_v2(Bucket=bucket_name)
-
-#     if 'Contents' in response:
-#         for obj in response['Contents']:
-#             print(f"Object Key: {obj['Key']}")
-#     else:
-#         print("The bucket is empty.")
-# except Exception as e:
-#     print(f"Error listing objects in the bucket: {e}")
-
-
-
 Image.MAX_IMAGE_PIXELS = None  
 
 def pdf_to_image(pdf_path,output_folder):
@@ -131,17 +105,4 @@ def delete_old_files(output_path):
             if file_creation_time < one_day_ago:
                 os.remove(file_path)
                 print(f"Deleted: {file_path}")
-
-
-
-# def pdf_to_image(pdf_path,output_folder):
-#     images = convert_from_path(pdf_path)
-#     images = convert_from_path(pdf_path, dpi=300)
-#     path_list = []
-#     for i, image in enumerate(images):
-#         image_resized = image.resize((1024, 1024))  
-#         image_path = os.path.join(output_folder, f'page_{i + 1}.png')
-#         image_resized.save(image_path, 'PNG')
-#         path_list.append(image_path)
-#     return path_list
 
