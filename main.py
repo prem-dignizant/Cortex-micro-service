@@ -38,11 +38,12 @@ app.add_middleware(
 
 
 # Helper function to send data via WebSocket
-async def notify_client(websocket: WebSocket, task_id: str, xfdf_content: list):
+async def notify_client(websocket: WebSocket, task_id: str, xfdf_content: list,page_num:int):
     message = {
         "task_id": task_id,
         "status": "completed",
-        "xfdf_content": xfdf_content
+        "xfdf_content": xfdf_content,
+        "page_num": page_num
     }
     await websocket.send_json(message)
 
@@ -64,34 +65,35 @@ async def run_in_thread_pool(func, *args):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor, func, *args)
 
-def ml_process(s3_url):
+def ml_process(s3_url,page_num):
     try:
         pdf_file = get_s3_data(s3_url,folder_path)
         if not pdf_file:
             raise HTTPException(status_code=400, detail="Failed to download PDF")
-        all_images = pdf_to_image(pdf_file,folder_path)
-        # return all_images[0]
-        xfdf_list = []
-        for image in all_images:
-            sam_result = get_segment(image)
-            coco_format = process_segmentation_masks(sam_result)
-            xfdf_content = convert_json_to_xfdf(coco_format)
+        image = pdf_to_image(pdf_file,folder_path,page_num)
 
-            data = {}
-            data[f'page_{all_images.index(image)}'] = xfdf_content
-            xfdf_list.append(data)
-
-            os.remove(image)
-        return xfdf_list
+        sam_result = get_segment(image)
+        coco_format = process_segmentation_masks(sam_result)
+        xfdf_content = convert_json_to_xfdf(coco_format,page_num)  
+        os.remove(pdf_file)
+        os.remove(image)
+        return xfdf_content
     except Exception as e:
+        try:
+            os.remove(pdf_file)
+            os.remove(image)
+        except:
+            pass
         raise HTTPException(status_code=400, detail=f"Failed to ml_process: {e}")
+    
+    
     
 @app.post("/process-pdf")
 async def process_pdf(request: PDFRequest):
     try:
         s3_url = request.s3_url
-        xfdf_content = await run_in_thread_pool(ml_process, s3_url)
-        # file_url = f"{BASE_URL}/download/{os.path.basename(zip_file_path)}"
+        page_num = request.page_num 
+        xfdf_content = await run_in_thread_pool(ml_process, s3_url,page_num)
         return {"xfdf_content": xfdf_content}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
@@ -102,6 +104,7 @@ async def multi_process_pdf(request: MultiPDFRequest,background_tasks: Backgroun
     print('************')
     s3_url = request.s3_url
     client_id  = request.client_id 
+    page_num = request.page_num
     if client_id not in active_connections:
         print('******WebSocket connection not found******')
         raise HTTPException(status_code=400, detail="WebSocket connection not found")
@@ -111,8 +114,8 @@ async def multi_process_pdf(request: MultiPDFRequest,background_tasks: Backgroun
 
     def task_wrapper():
         try:
-            xfdf_content = ml_process(s3_url)
-            asyncio.run(notify_client(active_connections[client_id], task_id, xfdf_content))
+            xfdf_content = ml_process(s3_url,page_num)
+            asyncio.run(notify_client(active_connections[client_id], task_id, xfdf_content,page_num))
         except Exception as e:
             error_message = {"task_id": task_id, "status": "failed", "error": str(e)}
             asyncio.run(active_connections[client_id].send_json(error_message))

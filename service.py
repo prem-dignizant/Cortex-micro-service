@@ -39,56 +39,57 @@ get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_
 
 Image.MAX_IMAGE_PIXELS = None  
 
-def pdf_to_image(pdf_path,output_folder):
+def pdf_to_image(pdf_path,output_folder,page_num):
+    page_num = page_num - 1
     images = convert_from_path(pdf_path, dpi=500)
-    image_list = []
-    for image in images:
+    image = images[page_num]
+    # image_list = []
+    # for image in images:
 
-        img_width, img_height = image.size
+    img_width, img_height = image.size
 
-        # Crop the image by 5% from all sides
-        crop_width = int(img_width * 0.05)
-        crop_height = int(img_height * 0.05)
-        
-        # Crop the image (left, upper, right, lower)
-        cropped_image = image.crop((
-            crop_width, crop_height, 
-            img_width - crop_width, img_height - crop_height
-        ))
+    # Crop the image by 5% from all sides
+    crop_width = int(img_width * 0.05)
+    crop_height = int(img_height * 0.05)
+    
+    # Crop the image (left, upper, right, lower)
+    cropped_image = image.crop((
+        crop_width, crop_height, 
+        img_width - crop_width, img_height - crop_height
+    ))
 
-        cropped_width, cropped_height = cropped_image.size
-        aspect_ratio = cropped_width / cropped_height
+    cropped_width, cropped_height = cropped_image.size
+    aspect_ratio = cropped_width / cropped_height
 
-        if cropped_width > cropped_height:
-            new_width = 1024
-            new_height = int(new_width / aspect_ratio)
-        else:
-            new_height = 1024
-            new_width = int(new_height * aspect_ratio)
-        
-        # Resize the image using the LANCZOS resampling method
-        resized_image = cropped_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Create a new blank image with a 1024x1024 white background
-        new_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
-        
-        # Calculate the position to paste the resized image onto the white background
-        left = (1024 - new_width) // 2
-        top = (1024 - new_height) // 2
-        new_image.paste(resized_image, (left, top))
+    if cropped_width > cropped_height:
+        new_width = 1024
+        new_height = int(new_width / aspect_ratio)
+    else:
+        new_height = 1024
+        new_width = int(new_height * aspect_ratio)
+    
+    # Resize the image using the LANCZOS resampling method
+    resized_image = cropped_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    # Create a new blank image with a 1024x1024 white background
+    new_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
+    
+    # Calculate the position to paste the resized image onto the white background
+    left = (1024 - new_width) // 2
+    top = (1024 - new_height) // 2
+    new_image.paste(resized_image, (left, top))
 
 
-        
-        # Save the high-resolution image (original image)
-        # high_res_image_path = os.path.join(output_folder, 'high_res_image.png')
-        # image.save(high_res_image_path, 'PNG')
+    
+    # Save the high-resolution image (original image)
+    # high_res_image_path = os.path.join(output_folder, 'high_res_image.png')
+    # image.save(high_res_image_path, 'PNG')
 
-        reshaped_image_path = random_file_name(output_folder , "image" , "png")
+    reshaped_image_path = random_file_name(output_folder , "image" , "png")
 
-        new_image.save(reshaped_image_path, 'PNG')
-        image_list.append(reshaped_image_path)
-    os.remove(pdf_path)
-    return  image_list
+    new_image.save(reshaped_image_path, 'PNG')
+    # image_list.append(reshaped_image_path)
+    return  reshaped_image_path
 
 
 def delete_old_files(output_path):

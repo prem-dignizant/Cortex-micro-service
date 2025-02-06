@@ -293,14 +293,14 @@ def create_xfdf_string(vertices, color="#239123", page="0"):
 </xfdf>'''
     return xfdf.replace('\n', '').replace('    ', '')
 
-def convert_json_to_xfdf(json_data):
+def convert_json_to_xfdf(json_data,page_num):
     """Convert JSON annotations to XFDF format and save directly to file."""
     final_xfdf = []
     # with open(output_file, 'w', encoding='utf-8') as f:
     for annotation in json_data['annotations']:
         # Create XFDF for segmentation
         segmentation_vertices = annotation['segmentation'][0]
-        segmentation_xfdf = create_xfdf_string(segmentation_vertices)
+        segmentation_xfdf = create_xfdf_string(segmentation_vertices,page=page_num)
         # Write XFDF string directly to file
         final_xfdf.append(segmentation_xfdf)
     return final_xfdf
