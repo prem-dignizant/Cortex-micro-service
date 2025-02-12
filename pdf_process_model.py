@@ -1,12 +1,16 @@
 import cv2
 import torch
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 import os
-import supervision as sv
+# import supervision as sv
 from datetime import datetime
 import pytz
 import uuid
 import xml.etree.ElementTree as ET
+import numpy as np
+# from shapely.geometry import Polygon
+import json , random
+import colorsys
 
 print("OpenCV version:", cv2.__version__)
 print(torch.cuda.is_available())
@@ -36,13 +40,9 @@ def get_segment(image_path):
 
 ########################################################################
 
-import numpy as np
-from shapely.geometry import Polygon
-import json , random
-
-def mask_to_polygons(mask_results):
+def mask_to_polygons(mask_results,metadata):
     """
-    Convert segmentation masks to polygon annotations.
+    Convert segmentation masks to polygon annotations and rescale to original image size.
     
     Args:
         mask_results (list): List of dictionaries containing segmentation results
@@ -50,6 +50,12 @@ def mask_to_polygons(mask_results):
     Returns:
         list: List of dictionaries containing polygon annotations
     """
+    original_width = metadata['original_width']
+    new_width = metadata['new_width']
+    original_height = metadata['original_height']
+    new_height = metadata['new_height']
+    pad_x = (1024 - new_width) // 2
+    pad_y = (1024 - new_height) // 2
     annotations = []
     
     # Sort masks by area (largest to smallest)
@@ -71,15 +77,24 @@ def mask_to_polygons(mask_results):
             epsilon = 0.005 * cv2.arcLength(contour, True)
             approx = cv2.approxPolyDP(contour, epsilon, True)
             
-            # Convert to list of [x,y] coordinates
+            # Convert to list of [x, y] coordinates
             polygon = [[float(point[0][0]), float(point[0][1])] for point in approx]
             
+            # Rescale polygon coordinates to original image size
+            rescaled_polygon = [
+                [
+                    ((x - pad_x) * original_width) / new_width, 
+                    ((y - pad_y) * original_height) / new_height
+                ]
+                for x, y in polygon
+            ]
+            
             # Only add polygons with enough points
-            if len(polygon) >= 3:  # minimum 3 points to form a polygon
-                polygons.append(polygon)
+            if len(rescaled_polygon) >= 3:  # minimum 3 points to form a polygon
+                polygons.append(rescaled_polygon)
         
         if polygons:
-            # Calculate bounding box
+            # Calculate bounding box for rescaled polygons
             all_points = np.concatenate([np.array(poly) for poly in polygons])
             x_min, y_min = np.min(all_points, axis=0)
             x_max, y_max = np.max(all_points, axis=0)
@@ -96,7 +111,6 @@ def mask_to_polygons(mask_results):
             }
             
             annotations.append(annotation)
-    
     coco_format = {
         'info': {
             'description': 'Converted from segmentation masks',
@@ -106,42 +120,42 @@ def mask_to_polygons(mask_results):
         'categories': [{'id': 1, 'name': 'object'}],  
         'annotations': annotations
     }
-
     return coco_format
 
-def save_annotations(annotations, output_file):
-    """
-    Save annotations to a COCO-format JSON file.
+
+# def save_annotations(annotations, output_file):
+#     """
+#     Save annotations to a COCO-format JSON file.
     
-    Args:
-        annotations (list): List of annotation dictionaries
-        output_file (str): Path to output JSON file
-    """
-    coco_format = {
-        'info': {
-            'description': 'Converted from segmentation masks',
-            'version': '1.0',
-        },
-        'images': [{'id': 0, 'file_name': 'image.jpg'}],  
-        'categories': [{'id': 1, 'name': 'object'}],  
-        'annotations': annotations
-    }
+#     Args:
+#         annotations (list): List of annotation dictionaries
+#         output_file (str): Path to output JSON file
+#     """
+#     coco_format = {
+#         'info': {
+#             'description': 'Converted from segmentation masks',
+#             'version': '1.0',
+#         },
+#         'images': [{'id': 0, 'file_name': 'image.jpg'}],  
+#         'categories': [{'id': 1, 'name': 'object'}],  
+#         'annotations': annotations
+#     }
     
-    with open(output_file, 'w') as f:
-        json.dump(coco_format, f, indent=2)
+#     with open(output_file, 'w') as f:
+#         json.dump(coco_format, f, indent=2)
 
 
-def process_segmentation_masks(sam_result, output_file='annotations.json'):
-    """
-    Process SAM results and save as polygon annotations.
+# def process_segmentation_masks(sam_result, metadata):
+#     """
+#     Process SAM results and save as polygon annotations.
     
-    Args:
-        sam_result (list): List of SAM segmentation results
-        output_file (str): Path to save the annotations
-    """
-    coco_format = mask_to_polygons(sam_result)
-    # save_annotations(annotations, output_file)
-    return coco_format
+#     Args:
+#         sam_result (list): List of SAM segmentation results
+#         output_file (str): Path to save the annotations
+#     """
+#     coco_format = mask_to_polygons(sam_result,metadata)
+#     # save_annotations(annotations, output_file)
+#     return coco_format
 
 ########################################################################
 
@@ -258,39 +272,56 @@ def process_masks_to_xfdf(sam_result):
 
 ########################################################################
 
-def create_xfdf_string(vertices, color="#239123", page="0"):
-    """Create XFDF string for a polygon annotation."""
-    # Generate unique identifier
+def generate_random_color():
+    """
+    Generate a random hex color code.
+    This function picks a random hue (0-1) while keeping saturation and lightness fixed
+    to create vivid colors. Adjust s (saturation) and l (lightness) to tweak the color scale.
+    """
+    h = random.random()  # random hue in [0,1)
+    s = 0.8             # fixed saturation
+    l = 0.5             # fixed lightness
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return '#{:02X}{:02X}{:02X}'.format(int(r * 255), int(g * 255), int(b * 255))
+
+
+
+def create_xfdf_string(vertices, color, page="0"):
+    """Create XFDF string for a polygon annotation with the given color."""
     annotation_id = str(uuid.uuid4())
     current_date = datetime.now().strftime("D:%Y%m%d%H%M%S+02'00'")
-    # Convert vertices to string format
-    vertices_str = ";".join([f"{x},{842-y}" for x, y in vertices])  # Flip y-coordinate (842 - y)
+    
+    # Convert vertices to string format and flip y-coordinate (842 - y)
+    vertices_str = ";".join([f"{x},{842 - y}" for x, y in vertices])
+    
     # Calculate rect from vertices
     x_coords = [x for x, y in vertices]
     y_coords = [y for x, y in vertices]
     rect = f"{min(x_coords)},{min(y_coords)},{max(x_coords)},{max(y_coords)}"
+    
     xfdf = f'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
-    <pdf-info xmlns="http://www.pdftron.com/pdfinfo" version="2"/>
-    <fields/>
-    <annots>
-        <polygon color="{color}"
-                 creationdate="{current_date}"
-                 date="{current_date}"
-                 flags="print"
-                 interior-color="{color}"
-                 name="{annotation_id}"
-                 opacity="1"
-                 page="{page}"
-                 rect="{rect}"
-                 subject="Polygon"
-                 title="1"
-                 width="0.5">
-            <vertices>{vertices_str}</vertices>
-        </polygon>
-    </annots>
-    <pages><defmtx matrix="1,0,0,-1,0,842"/></pages>
-</xfdf>'''
+    <xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
+        <pdf-info xmlns="http://www.pdftron.com/pdfinfo" version="2"/>
+        <fields/>
+        <annots>
+            <polygon color="{color}"
+                    creationdate="{current_date}"
+                    date="{current_date}"
+                    flags="print"
+                    interior-color="{color}"
+                    name="{annotation_id}"
+                    opacity="1"
+                    page="{page}"
+                    rect="{rect}"
+                    subject="Polygon"
+                    title="1"
+                    width="0.5">
+                <vertices>{vertices_str}</vertices>
+            </polygon>
+        </annots>
+        <pages><defmtx matrix="1,0,0,-1,0,842"/></pages>
+    </xfdf>'''
+    # Remove extra whitespace and newline characters.
     return xfdf.replace('\n', '').replace('    ', '')
 
 def convert_json_to_xfdf(json_data,page_num):
@@ -298,9 +329,9 @@ def convert_json_to_xfdf(json_data,page_num):
     final_xfdf = []
     # with open(output_file, 'w', encoding='utf-8') as f:
     for annotation in json_data['annotations']:
-        # Create XFDF for segmentation
+        color = generate_random_color()
         segmentation_vertices = annotation['segmentation'][0]
-        segmentation_xfdf = create_xfdf_string(segmentation_vertices,page=page_num)
+        segmentation_xfdf = create_xfdf_string(segmentation_vertices,color,page_num)
         # Write XFDF string directly to file
         final_xfdf.append(segmentation_xfdf)
     return final_xfdf

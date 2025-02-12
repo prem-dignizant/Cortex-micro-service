@@ -32,64 +32,53 @@ def get_s3_data(s3_url,input_folder):
         print(f"Error downloading from S3: {e}")
         return None
 
-get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
+# get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
 # print(AWS_ACCESS_KEY_ID)
 # # Initialize the S3 client
 # s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=REGION_NAME)
 
 Image.MAX_IMAGE_PIXELS = None  
 
-def pdf_to_image(pdf_path,output_folder,page_num):
-    page_num = page_num - 1
-    images = convert_from_path(pdf_path, dpi=500)
-    image = images[page_num]
-    # image_list = []
-    # for image in images:
+def convert_pdf_to_image(pdf_path, output_folder,page_num):
+    try:
+        page_num = page_num - 1
+        images = convert_from_path(pdf_path, dpi=500)
+        image = images[page_num]
 
-    img_width, img_height = image.size
+        img_width, img_height = image.size  # Original image size
+        aspect_ratio = img_width / img_height
 
-    # Crop the image by 5% from all sides
-    crop_width = int(img_width * 0.05)
-    crop_height = int(img_height * 0.05)
-    
-    # Crop the image (left, upper, right, lower)
-    cropped_image = image.crop((
-        crop_width, crop_height, 
-        img_width - crop_width, img_height - crop_height
-    ))
+        # Determine new dimensions while maintaining aspect ratio
+        if img_width > img_height:
+            new_width = 1024
+            new_height = int(new_width / aspect_ratio)
+        else:
+            new_height = 1024
+            new_width = int(new_height * aspect_ratio)
+        
+        # Resize the image
+        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Create 1024x1024 canvas with white background
+        new_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
+        left = (1024 - new_width) // 2
+        top = (1024 - new_height) // 2
+        new_image.paste(resized_image, (left, top))
 
-    cropped_width, cropped_height = cropped_image.size
-    aspect_ratio = cropped_width / cropped_height
+        # Save images
+        os.makedirs(output_folder, exist_ok=True)
+        # high_res_image_path = os.path.join(output_folder, 'high_res_image.jpg')
+        reshaped_image_path = random_file_name(output_folder , "image" , "jpg")
+        
+        # image.save(high_res_image_path, 'JPEG')
+        new_image.save(reshaped_image_path, 'JPEG')
 
-    if cropped_width > cropped_height:
-        new_width = 1024
-        new_height = int(new_width / aspect_ratio)
-    else:
-        new_height = 1024
-        new_width = int(new_height * aspect_ratio)
-    
-    # Resize the image using the LANCZOS resampling method
-    resized_image = cropped_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    # Create a new blank image with a 1024x1024 white background
-    new_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
-    
-    # Calculate the position to paste the resized image onto the white background
-    left = (1024 - new_width) // 2
-    top = (1024 - new_height) // 2
-    new_image.paste(resized_image, (left, top))
+        metadata = {"original_width" : img_width,"original_height" : img_height,"new_width" : new_width,"new_height" : new_height}   
 
+        return  reshaped_image_path, metadata
+    except Exception as e:
+        return None , None
 
-    
-    # Save the high-resolution image (original image)
-    # high_res_image_path = os.path.join(output_folder, 'high_res_image.png')
-    # image.save(high_res_image_path, 'PNG')
-
-    reshaped_image_path = random_file_name(output_folder , "image" , "png")
-
-    new_image.save(reshaped_image_path, 'PNG')
-    # image_list.append(reshaped_image_path)
-    return  reshaped_image_path
 
 
 def delete_old_files(output_path):

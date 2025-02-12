@@ -4,11 +4,10 @@ import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import uuid
-from service import get_s3_data , pdf_to_image
-from pdf_process_model import convert_json_to_xfdf, get_segment , process_segmentation_masks
+from service import get_s3_data , convert_pdf_to_image
+from pdf_process_model import convert_json_to_xfdf, get_segment , mask_to_polygons
 from schema import PDFRequest , MultiPDFRequest
 from apscheduler.schedulers.background import BackgroundScheduler
-from contextlib import asynccontextmanager
 
 # Store active WebSocket connections
 active_connections = {}
@@ -35,7 +34,6 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],  # Allow all headers
 )
-
 
 # Helper function to send data via WebSocket
 async def notify_client(websocket: WebSocket, task_id: str, xfdf_content: list,page_num:int):
@@ -70,10 +68,11 @@ def ml_process(s3_url,page_num):
         pdf_file = get_s3_data(s3_url,folder_path)
         if not pdf_file:
             raise HTTPException(status_code=400, detail="Failed to download PDF")
-        image = pdf_to_image(pdf_file,folder_path,page_num)
-
+        image , metadata = convert_pdf_to_image(pdf_file,folder_path,page_num)
+        if not image:
+            raise HTTPException(status_code=400, detail=f"error : convert_pdf_to_image")
         sam_result = get_segment(image)
-        coco_format = process_segmentation_masks(sam_result)
+        coco_format = mask_to_polygons(sam_result,metadata)
         xfdf_content = convert_json_to_xfdf(coco_format,page_num)  
         os.remove(pdf_file)
         os.remove(image)
