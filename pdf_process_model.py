@@ -298,31 +298,15 @@ def create_xfdf_string(vertices, color, page="0"):
     x_coords = [x for x, y in vertices]
     y_coords = [y for x, y in vertices]
     rect = f"{min(x_coords)},{min(y_coords)},{max(x_coords)},{max(y_coords)}"
-    
-    xfdf = f'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-    <xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
-        <pdf-info xmlns="http://www.pdftron.com/pdfinfo" version="2"/>
-        <fields/>
-        <annots>
-            <polygon color="{color}"
-                    creationdate="{current_date}"
-                    date="{current_date}"
-                    flags="print"
-                    interior-color="{color}"
-                    name="{annotation_id}"
-                    opacity="1"
-                    page="{page}"
-                    rect="{rect}"
-                    subject="Polygon"
-                    title="1"
-                    width="0.5">
-                <vertices>{vertices_str}</vertices>
-            </polygon>
-        </annots>
-        <pages><defmtx matrix="1,0,0,-1,0,842"/></pages>
-    </xfdf>'''
+
+    xfdf_dict = {
+        "color": color,"creationdate" : current_date,"date" : current_date,"interior-color" : color,
+        "name" : annotation_id,"page" : page,"rect" : rect,"vertices" : vertices_str
+        }   
+
+
     # Remove extra whitespace and newline characters.
-    return xfdf.replace('\n', '').replace('    ', '')
+    return xfdf_dict
 
 def convert_json_to_xfdf(json_data,page_num):
     """Convert JSON annotations to XFDF format and save directly to file."""
