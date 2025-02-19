@@ -11,9 +11,10 @@ import numpy as np
 # from shapely.geometry import Polygon
 import json , random
 import colorsys
+from PIL import Image
 
-print("OpenCV version:", cv2.__version__)
-print(torch.cuda.is_available())
+# print("OpenCV version:", cv2.__version__)
+# print(torch.cuda.is_available())
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 MODEL_TYPE = "vit_h"
 CHECKPOINT_PATH= os.getenv("CHECKPOINT_PATH")
@@ -40,293 +41,229 @@ def get_segment(image_path):
 
 ########################################################################
 
-def mask_to_polygons(mask_results,metadata):
-    """
-    Convert segmentation masks to polygon annotations and rescale to original image size.
-    
-    Args:
-        mask_results (list): List of dictionaries containing segmentation results
-        
-    Returns:
-        list: List of dictionaries containing polygon annotations
-    """
-    original_width = metadata['original_width']
-    new_width = metadata['new_width']
-    original_height = metadata['original_height']
-    new_height = metadata['new_height']
-    pad_x = (1024 - new_width) // 2
-    pad_y = (1024 - new_height) // 2
-    annotations = []
-    
-    # Sort masks by area (largest to smallest)
-    sorted_masks = sorted(mask_results, key=lambda x: x['area'], reverse=True)
-    
-    for idx, mask_data in enumerate(sorted_masks):
-        # Get the binary mask
-        mask = mask_data['segmentation'].astype(np.uint8)
-        
-        # Find contours in the mask
-        contours, _ = cv2.findContours(mask, 
-                                     cv2.RETR_EXTERNAL, 
-                                     cv2.CHAIN_APPROX_SIMPLE)
-        
-        # Convert contours to polygons
-        polygons = []
-        for contour in contours:
-            # Simplify contour to reduce number of points
-            epsilon = 0.005 * cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, epsilon, True)
-            
-            # Convert to list of [x, y] coordinates
-            polygon = [[float(point[0][0]), float(point[0][1])] for point in approx]
-            
-            # Rescale polygon coordinates to original image size
-            rescaled_polygon = [
-                [
-                    ((x - pad_x) * original_width) / new_width, 
-                    ((y - pad_y) * original_height) / new_height
-                ]
-                for x, y in polygon
-            ]
-            
-            # Only add polygons with enough points
-            if len(rescaled_polygon) >= 3:  # minimum 3 points to form a polygon
-                polygons.append(rescaled_polygon)
-        
-        if polygons:
-            # Calculate bounding box for rescaled polygons
-            all_points = np.concatenate([np.array(poly) for poly in polygons])
-            x_min, y_min = np.min(all_points, axis=0)
-            x_max, y_max = np.max(all_points, axis=0)
-            
-            annotation = {
-                'id': idx,
-                'image_id': mask_data.get('image_id', 0),
-                'category_id': mask_data.get('category_id', 1),
-                'segmentation': polygons,
-                'area': float(mask_data['area']),
-                'bbox': [float(x_min), float(y_min), 
-                        float(x_max - x_min), float(y_max - y_min)],
-                'iscrowd': 0
-            }
-            
-            annotations.append(annotation)
-    coco_format = {
-        'info': {
-            'description': 'Converted from segmentation masks',
-            'version': '1.0',
-        },
-        'images': [{'id': 0, 'file_name': 'image.jpg'}],  
-        'categories': [{'id': 1, 'name': 'object'}],  
-        'annotations': annotations
-    }
-    return coco_format
+# def generate_random_color():
+#     """Generate a random hex color code."""
+#     r = random.randint(0, 255)
+#     g = random.randint(0, 255)
+#     b = random.randint(0, 255)
+#     return f"#{r:02X}{g:02X}{b:02X}"
 
-
-# def save_annotations(annotations, output_file):
+# def sam_masks_to_pdf_annotations(sam_result, target_width, target_height, page_number=0):
 #     """
-#     Save annotations to a COCO-format JSON file.
-    
+#     Convert SAM segmentation masks to PDF annotation format with resized coordinates.
+#     Each mask gets a randomly generated color.
+#     Args:
+#         sam_result (list): List of dictionaries containing SAM segmentation results
+#         target_width (int): Target width for resizing annotations
+#         target_height (int): Target height for resizing annotations
+#         page_number (int): PDF page number for the annotations
+#     Returns:
+#         list: List of dictionaries in PDF annotation format
+#     """
+#     annotations = []
+#     # Sort masks by area (largest to smallest)
+#     sorted_masks = sorted(sam_result, key=lambda x: x['area'], reverse=True)
+#     # Calculate scaling factors
+#     original_size = sorted_masks[0]['segmentation'].shape
+#     scale_x = target_width / original_size[1]
+#     scale_y = target_height / original_size[0]
+#     # Generate current date in PDF format
+#     current_date = datetime.now().strftime("D:%Y%m%d%H%M%S+02'00'")
+#     for idx, mask_data in enumerate(sorted_masks):
+#         # Get the binary mask
+#         original_mask = mask_data['segmentation'].astype(np.uint8)
+#         # Find contours in the original mask
+#         contours, _ = cv2.findContours(
+#             original_mask,
+#             cv2.RETR_EXTERNAL,
+#             cv2.CHAIN_APPROX_SIMPLE
+#         )
+#         # Skip if no contours found
+#         if not contours:
+#             continue
+#         # Get the largest contour
+#         contour = max(contours, key=cv2.contourArea)
+#         # Simplify contour to reduce number of points
+#         epsilon = 0.005 * cv2.arcLength(contour, True)
+#         approx = cv2.approxPolyDP(contour, epsilon, True)
+#         # Apply scaling to coordinates without flipping Y coordinates
+#         resized_vertices = []
+#         for point in approx:
+#             x = float(point[0][0] * scale_x)
+#             y = float(point[0][1] * scale_y)  # No longer flipping Y coordinates
+#             resized_vertices.append(f"{x:.1f},{y:.1f}")
+#         vertices_str = ";" .join(resized_vertices)
+#         # Calculate bounding box for the annotation
+#         x_values = [float(point.split(',')[0]) for point in resized_vertices]
+#         y_values = [float(point.split(',')[1]) for point in resized_vertices]
+#         min_x = min(x_values)
+#         max_x = max(x_values)
+#         min_y = min(y_values)
+#         max_y = max(y_values)
+#         # Generate a random color for this annotation
+#         random_color = generate_random_color()
+#         # Create annotation in the required format
+#         annotation = {
+#             "color": random_color,
+#             "creationdate": current_date,
+#             "date": current_date,
+#             "interior-color": random_color,
+#             "name": str(uuid.uuid4()),
+#             "page": page_number,
+#             "rect": f"{min_x:.1f},{min_y:.1f},{max_x:.1f},{max_y:.1f}",
+#             "vertices": vertices_str
+#         }
+#         annotations.append(annotation)
+#     return annotations
+# def process_sam_to_pdf_annotations(
+#     sam_result,
+#     target_width,
+#     target_height,
+#     page_number=0
+# ):
+#     """
+#     Process SAM results and save as PDF annotation format with random colors.
+#     Args:
+#         sam_result (list): List of SAM segmentation results
+#         target_width (int): Desired width for output annotations
+#         target_height (int): Desired height for output annotations
+#         output_file (str): Path to save the annotations
+#         page_number (int): PDF page number
+#     Returns:
+#         list: List of annotation dictionaries
+#     """
+
+#     annotations = sam_masks_to_pdf_annotations(
+#         sam_result,
+#         target_width,
+#         target_height,
+#         page_number
+#     )
+#     # import json
+#     # with open(output_file, 'w') as f:
+#     #     json.dump(annotations, f, indent=4)
+#     return annotations
+
+
+########################################################################
+def generate_random_color():
+    """Generate a random color in hex format."""
+    return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+
+def format_rect(bbox):
+    """Convert bbox [x_min, y_min, width, height] to 'x_min,y_min,x_max,y_max' string format."""
+    return f"{bbox[0]:.1f},{bbox[1]:.1f},{bbox[0] + bbox[2]:.1f},{bbox[1] + bbox[3]:.1f}"
+
+def format_vertices(polygon):
+    """Convert polygon points to 'x,y;x,y;...' string format without nesting."""
+    return ";".join([f"{point[0]:.1f},{point[1]:.1f}" for point in polygon])
+
+def get_current_date_string():
+    """Generate date string in the format D:YYYYMMDDHHMMSSz'00'"""
+    now = datetime.now()
+    # Adjust timezone offset as needed
+    timezone_offset = "+02'00'"
+    date_str = f"D:{now.strftime('%Y%m%d%H%M%S')}{timezone_offset}"
+    return date_str
+def resize_and_convert_masks(sam_result, target_width, target_height, page_number=1):
+    """
+    Resize masks and convert to custom annotation format matching the provided structure.
+    Args:
+        sam_result (list): List of dictionaries containing SAM segmentation results
+        target_width (int): Desired width for output annotations
+        target_height (int): Desired height for output annotations
+        page_number (int): Page number for the annotations
+    Returns:
+        list: List of dictionaries containing custom format annotations
+    """
+    annotations = []
+    # Sort masks by area (largest to smallest)
+    sorted_masks = sorted(sam_result, key=lambda x: x['area'], reverse=True)
+    # Calculate scaling factors
+    original_size = sorted_masks[0]['segmentation'].shape
+    scale_x = target_width / original_size[1]
+    scale_y = target_height / original_size[0]
+    current_date = get_current_date_string()
+    for idx, mask_data in enumerate(sorted_masks, 1):
+        # Get the binary mask and resize it
+        original_mask = mask_data['segmentation'].astype(np.uint8)
+        mask_image = Image.fromarray(original_mask)
+        resized_mask = np.array(mask_image.resize(
+            (target_width, target_height),
+            Image.Resampling.NEAREST
+        ))
+        # Find contours in the resized mask
+        contours, _ = cv2.findContours(
+            resized_mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            # Get the largest contour
+            largest_contour = max(contours, key=cv2.contourArea)
+            # Simplify contour
+            epsilon = 0.005 * cv2.arcLength(largest_contour, True)
+            approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+            # Convert contour points to list format (without nesting)
+            polygon = [float(point[0][0]) for point in approx] + [float(point[0][1]) for point in approx]
+            # Restructure polygon to pairs of [x1, y1, x2, y2, ...]
+            polygon_pairs = []
+            for i in range(0, len(polygon)//2):
+                polygon_pairs.append([polygon[i], polygon[i + len(polygon)//2]])
+            # Calculate bounding box
+            x_coords = [p[0] for p in polygon_pairs]
+            y_coords = [p[1] for p in polygon_pairs]
+            x_min, y_min = min(x_coords), min(y_coords)
+            x_max, y_max = max(x_coords), max(y_coords)
+            bbox = [x_min, y_min, x_max - x_min, y_max - y_min]
+            # Generate random color
+            color = generate_random_color()
+            annotation = {
+                'color': color,
+                'creationdate': current_date,
+                'date': current_date,
+                'interior-color': color,
+                'name': str(uuid.uuid4()),
+                'page': page_number,
+                'rect': format_rect(bbox),
+                'vertices': format_vertices(polygon_pairs)
+            }
+            annotations.append(annotation)
+    return annotations
+
+# def save_custom_annotations(annotations, output_file):
+#     """
+#     Save annotations in custom format.
 #     Args:
 #         annotations (list): List of annotation dictionaries
 #         output_file (str): Path to output JSON file
 #     """
-#     coco_format = {
-#         'info': {
-#             'description': 'Converted from segmentation masks',
-#             'version': '1.0',
-#         },
-#         'images': [{'id': 0, 'file_name': 'image.jpg'}],  
-#         'categories': [{'id': 1, 'name': 'object'}],  
-#         'annotations': annotations
-#     }
-    
 #     with open(output_file, 'w') as f:
-#         json.dump(coco_format, f, indent=2)
+#         json.dump(annotations, f, indent=4)
 
-
-# def process_segmentation_masks(sam_result, metadata):
+# def process_sam_to_custom(
+#     sam_result,
+#     target_width,
+#     target_height,
+#     output_file='custom_annotations.json',
+#     page_number=1
+# ):
 #     """
-#     Process SAM results and save as polygon annotations.
-    
+#     Process SAM results and save as custom format annotations.
 #     Args:
 #         sam_result (list): List of SAM segmentation results
+#         target_width (int): Desired width for output annotations
+#         target_height (int): Desired height for output annotations
 #         output_file (str): Path to save the annotations
+#         page_number (int): Page number for the annotations
+#     Returns:
+#         list: List of annotation dictionaries
 #     """
-#     coco_format = mask_to_polygons(sam_result,metadata)
-#     # save_annotations(annotations, output_file)
-#     return coco_format
-
-########################################################################
-
-def create_xfdf_from_masks(mask_results):
-    """
-    Convert segmentation masks to XFDF format for PDF annotations.
-    
-    Args:
-        mask_results (list): List of dictionaries containing segmentation results
-        output_file (str): Path to output XFDF file
-    """
-    # Create the root XFDF element
-    root = ET.Element("xfdf", {
-        "xmlns": "http://ns.adobe.com/xfdf/",
-        "xml:space": "preserve"
-    })
-    
-    # Add pdf-info element
-    pdf_info = ET.SubElement(root, "pdf-info", {
-        "xmlns": "http://www.pdftron.com/pdfinfo",
-        "version": "2"
-    })
-    
-    # Add fields element
-    fields = ET.SubElement(root, "fields")
-    
-    # Add annots element
-    annots = ET.SubElement(root, "annots")
-    
-    # Get current timestamp in PDF format
-    now = datetime.now(pytz.utc)
-    pdf_date = now.strftime("D:%Y%m%d%H%M%S+00'00'")
-    
-    # Process each mask
-    for idx, mask_data in enumerate(mask_results):
-        # Convert mask to polygon vertices
-        contours, _ = cv2.findContours(
-            mask_data['segmentation'].astype(np.uint8),
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE
-        )
-        
-        for contour in contours:
-            # Simplify contour
-            epsilon = 0.005 * cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, epsilon, True)
-            
-            # Convert points to vertices string
-            vertices = ";".join(
-                f"{float(point[0][0])},{float(point[0][1])}"
-                for point in approx
-            )
-            
-            if len(approx) >= 3:  # Only create polygon if we have at least 3 points
-                # Calculate bounding rect for the 'rect' attribute
-                x_min = float(np.min(approx[:, :, 0]))
-                y_min = float(np.min(approx[:, :, 1]))
-                x_max = float(np.max(approx[:, :, 0]))
-                y_max = float(np.max(approx[:, :, 1]))
-                
-                # Create polygon annotation
-                polygon = ET.SubElement(annots, "polygon", {
-                    "color": "#239123",  # Green color
-                    "creationdate": pdf_date,
-                    "date": pdf_date,
-                    "flags": "print",
-                    "interior-color": "#239123",
-                    "name": str(uuid.uuid4()),
-                    "opacity": "1",
-                    "page": "0",
-                    "rect": f"{x_min},{y_min},{x_max},{y_max}",
-                    "subject": "Polygon",
-                    "title": str(idx),
-                    "width": "0.5"
-                })
-                
-                # Add vertices
-                vertices_elem = ET.SubElement(polygon, "vertices")
-                vertices_elem.text = vertices
-    
-    # Add pages element with defmtx
-    pages = ET.SubElement(root, "pages")
-    ET.SubElement(pages, "defmtx", {
-        "matrix": "1,0,0,-1,0,842"
-    })
-    
-    # Create XML string
-    tree = ET.ElementTree(root)
-    
-    # Add XML declaration
-    xml_str = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
-    
-    # Convert tree to string and combine with declaration
-    tree_str = ET.tostring(root, encoding='unicode')
-    complete_xml = xml_str + tree_str
-    
-    # Save to file
-    # xfdf_path = random_file_name(output_path , file_name_prefix , "xfdf")
-    # with open(xfdf_path, 'w', encoding='utf-8') as f:
-    #     f.write(complete_xml)
-
-    return complete_xml
-
-def process_masks_to_xfdf(sam_result):
-    """
-    Process SAM results and save as XFDF annotations.
-    
-    Args:
-        sam_result (list): List of SAM segmentation results
-        output_file (str): Path to save the XFDF file
-    """
-    xfdf_content = create_xfdf_from_masks(sam_result)
-    return xfdf_content
-
-########################################################################
-
-def generate_random_color():
-    """
-    Generate a random hex color code.
-    This function picks a random hue (0-1) while keeping saturation and lightness fixed
-    to create vivid colors. Adjust s (saturation) and l (lightness) to tweak the color scale.
-    """
-    h = random.random()  # random hue in [0,1)
-    s = 0.8             # fixed saturation
-    l = 0.5             # fixed lightness
-    r, g, b = colorsys.hls_to_rgb(h, l, s)
-    return '#{:02X}{:02X}{:02X}'.format(int(r * 255), int(g * 255), int(b * 255))
-
-
-
-def create_xfdf_string(vertices, color, page="0"):
-    """Create XFDF string for a polygon annotation with the given color."""
-    annotation_id = str(uuid.uuid4())
-    current_date = datetime.now().strftime("D:%Y%m%d%H%M%S+02'00'")
-    
-    # Convert vertices to string format and flip y-coordinate (842 - y)
-    vertices_str = ";".join([f"{x},{842 - y}" for x, y in vertices])
-    
-    # Calculate rect from vertices
-    x_coords = [x for x, y in vertices]
-    y_coords = [y for x, y in vertices]
-    rect = f"{min(x_coords)},{min(y_coords)},{max(x_coords)},{max(y_coords)}"
-
-    xfdf_dict = {
-        "color": color,"creationdate" : current_date,"date" : current_date,"interior-color" : color,
-        "name" : annotation_id,"page" : page,"rect" : rect,"vertices" : vertices_str
-        }   
-
-
-    # Remove extra whitespace and newline characters.
-    return xfdf_dict
-
-def convert_json_to_xfdf(json_data,page_num):
-    """Convert JSON annotations to XFDF format and save directly to file."""
-    final_xfdf = []
-    # with open(output_file, 'w', encoding='utf-8') as f:
-    for annotation in json_data['annotations']:
-        color = generate_random_color()
-        segmentation_vertices = annotation['segmentation'][0]
-        segmentation_xfdf = create_xfdf_string(segmentation_vertices,color,page_num)
-        # Write XFDF string directly to file
-        final_xfdf.append(segmentation_xfdf)
-    return final_xfdf
-
-def process_json_file(input_file, output_file):
-    """Process JSON file and convert to XFDF."""
-    with open(input_file, 'r') as f:
-        json_data = json.load(f)
-    convert_json_to_xfdf(json_data, output_file)
-# Example usage
-
-# input_file = "annotations.json"
-# output_file = "annotations_xfdf.csv"
-# process_json_file(input_file, output_file)
+#     annotations = resize_and_convert_masks(
+#         sam_result,
+#         target_width,
+#         target_height,
+#         page_number
+#     )
+#     save_custom_annotations(annotations, output_file)
+#     return annotations

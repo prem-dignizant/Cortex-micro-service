@@ -32,54 +32,72 @@ def get_s3_data(s3_url,input_folder):
         print(f"Error downloading from S3: {e}")
         return None
 
-# get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/1182117" , "input_files")
+# get_s3_data("https://geometra4-dev.s3.eu-west-1.amazonaws.com/171" , "input_files")
 # print(AWS_ACCESS_KEY_ID)
-# # Initialize the S3 client
-# s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,region_name=REGION_NAME)
 
-Image.MAX_IMAGE_PIXELS = None  
 
-def convert_pdf_to_image(pdf_path, output_folder,page_num):
+# Image.MAX_IMAGE_PIXELS = None  
+
+# def convert_pdf_to_image(pdf_path, output_folder,page_num):
+#     try:
+#         page_num = page_num - 1
+#         images = convert_from_path(pdf_path, dpi=500)
+#         image = images[page_num]
+
+#         img_width, img_height = image.size  # Original image size
+#         aspect_ratio = img_width / img_height
+
+#         # Determine new dimensions while maintaining aspect ratio
+#         if img_width > img_height:
+#             new_width = 1024
+#             new_height = int(new_width / aspect_ratio)
+#         else:
+#             new_height = 1024
+#             new_width = int(new_height * aspect_ratio)
+        
+#         # Resize the image
+#         resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+#         # Create 1024x1024 canvas with white background
+#         new_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
+#         left = (1024 - new_width) // 2
+#         top = (1024 - new_height) // 2
+#         new_image.paste(resized_image, (left, top))
+
+#         # Save images
+#         os.makedirs(output_folder, exist_ok=True)
+#         # high_res_image_path = os.path.join(output_folder, 'high_res_image.jpg')
+#         reshaped_image_path = random_file_name(output_folder , "image" , "jpg")
+        
+#         # image.save(high_res_image_path, 'JPEG')
+#         new_image.save(reshaped_image_path, 'JPEG')
+
+#         metadata = {"original_width" : img_width,"original_height" : img_height,"new_width" : new_width,"new_height" : new_height}   
+
+#         return  reshaped_image_path, metadata
+#     except Exception as e:
+#         return None , None
+
+
+def convert_pdf_to_images(pdf_path,output_folder,page_num):
     try:
-        page_num = page_num - 1
-        images = convert_from_path(pdf_path, dpi=500)
-        image = images[page_num]
-
-        img_width, img_height = image.size  # Original image size
-        aspect_ratio = img_width / img_height
-
-        # Determine new dimensions while maintaining aspect ratio
-        if img_width > img_height:
-            new_width = 1024
-            new_height = int(new_width / aspect_ratio)
-        else:
-            new_height = 1024
-            new_width = int(new_height * aspect_ratio)
-        
-        # Resize the image
-        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Create 1024x1024 canvas with white background
-        new_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
-        left = (1024 - new_width) // 2
-        top = (1024 - new_height) // 2
-        new_image.paste(resized_image, (left, top))
-
-        # Save images
-        os.makedirs(output_folder, exist_ok=True)
-        # high_res_image_path = os.path.join(output_folder, 'high_res_image.jpg')
-        reshaped_image_path = random_file_name(output_folder , "image" , "jpg")
-        
-        # image.save(high_res_image_path, 'JPEG')
-        new_image.save(reshaped_image_path, 'JPEG')
-
-        metadata = {"original_width" : img_width,"original_height" : img_height,"new_width" : new_width,"new_height" : new_height}   
-
-        return  reshaped_image_path, metadata
+        images = convert_from_path(pdf_path, dpi=300)
+        # First image: 1024x1024
+        img1 = images[page_num]
+        img1 = img1.convert('RGB')
+        img1_resized = img1.resize((1024, 1024), Image.Resampling.LANCZOS)
+        img1_path = random_file_name(output_folder , "image" , "jpg")
+        img1_resized.save(img1_path, "JPEG", quality=95)
+        return img1_path      
+        # # Second image: 1191x842
+        # img2 = images[0]
+        # img2 = img2.convert('RGB')
+        # img2_resized = img2.resize((1191, 842), Image.Resampling.LANCZOS)
+        # img2_path = os.path.join(output_dir, "output_1191x842.jpg")
+        # img2_resized.save(img2_path, "JPEG", quality=95)
+        # print(f"Created 1191x842 image: {img2_path}")
     except Exception as e:
-        return None , None
-
-
+        print(f"An error occurred: {str(e)}")
 
 def delete_old_files(output_path):
     """

@@ -4,8 +4,8 @@ import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import uuid
-from service import get_s3_data , convert_pdf_to_image
-from pdf_process_model import convert_json_to_xfdf, get_segment , mask_to_polygons
+from service import get_s3_data , convert_pdf_to_images
+from pdf_process_model import get_segment , resize_and_convert_masks
 from schema import PDFRequest , MultiPDFRequest
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -63,17 +63,16 @@ async def run_in_thread_pool(func, *args):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor, func, *args)
 
-def ml_process(s3_url,page_num):
+def ml_process(s3_url,page_num,height,width):
     try:
         pdf_file = get_s3_data(s3_url,folder_path)
         if not pdf_file:
             raise HTTPException(status_code=400, detail="Failed to download PDF")
-        image , metadata = convert_pdf_to_image(pdf_file,folder_path,page_num)
+        image= convert_pdf_to_images(pdf_file,folder_path,page_num)
         if not image:
             raise HTTPException(status_code=400, detail=f"error : convert_pdf_to_image")
         sam_result = get_segment(image)
-        coco_format = mask_to_polygons(sam_result,metadata)
-        xfdf_content = convert_json_to_xfdf(coco_format,page_num)  
+        xfdf_content = resize_and_convert_masks(sam_result,width,height,page_num)
         os.remove(pdf_file)
         os.remove(image)
         return xfdf_content
@@ -92,7 +91,9 @@ async def process_pdf(request: PDFRequest):
     try:
         s3_url = request.s3_url
         page_num = request.page_num 
-        xfdf_content = await run_in_thread_pool(ml_process, s3_url,page_num)
+        height = request.height
+        width = request.width
+        xfdf_content = await run_in_thread_pool(ml_process, s3_url,page_num,height,width)
         return {"xfdf_content": xfdf_content}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
@@ -100,20 +101,20 @@ async def process_pdf(request: PDFRequest):
 
 @app.post("/multi_process_pdf")
 async def multi_process_pdf(request: MultiPDFRequest,background_tasks: BackgroundTasks):
-    print('************')
     s3_url = request.s3_url
     client_id  = request.client_id 
     page_num = request.page_num
+    height = request.height
+    width = request.width
+    
     if client_id not in active_connections:
         print('******WebSocket connection not found******')
         raise HTTPException(status_code=400, detail="WebSocket connection not found")
-    print('************')
-    print(active_connections)
     task_id = str(uuid.uuid4())
 
     def task_wrapper():
         try:
-            xfdf_content = ml_process(s3_url,page_num)
+            xfdf_content = ml_process(s3_url,page_num,height,width)
             asyncio.run(notify_client(active_connections[client_id], task_id, xfdf_content,page_num))
         except Exception as e:
             error_message = {"task_id": task_id, "status": "failed", "error": str(e)}

@@ -4,6 +4,8 @@ from pydantic import BaseModel
 class PDFRequest(BaseModel):
     s3_url: str
     page_num: int 
+    height : int
+    width : int
 
 class MultiPDFRequest(PDFRequest):
     client_id: str
